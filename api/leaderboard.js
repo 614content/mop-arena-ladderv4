@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { region = 'us', bracket = '2v2', season = '12' } = req.query;
+    const { region = 'us', bracket = '2v2', season = '1' } = req.query;
 
     console.log(`Fetching ${region} ${bracket} season ${season} data...`);
 
@@ -61,43 +61,73 @@ export default async function handler(req, res) {
     const tokenData = await tokenResponse.json();
     console.log('Access token obtained successfully');
 
-    // Step 2: Fetch leaderboard data from Blizzard API
-    const apiUrl = `https://${region}.api.blizzard.com/data/wow/pvp-season/${season}/pvp-leaderboard/${bracket}`;
-    const params = new URLSearchParams({
-      namespace: `dynamic-${region}`,
-      locale: 'en_US',
-      access_token: tokenData.access_token
-    });
+    // Step 2: Try multiple API approaches for MoP Classic
+    const seasonsToTry = [season, '1', '12', '13', '14', '15'];
+    let leaderboardData = null;
+    let lastError = null;
 
-    console.log(`Fetching from: ${apiUrl}?${params}`);
-    
-    const leaderboardResponse = await fetch(`${apiUrl}?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${tokenData.access_token}`
-      }
-    });
-
-    if (!leaderboardResponse.ok) {
-      const errorText = await leaderboardResponse.text();
-      console.error('Leaderboard request failed:', errorText);
-      
-      // Handle specific errors
-      if (leaderboardResponse.status === 404) {
-        return res.status(404).json({ 
-          error: `No data found for ${region} ${bracket} season ${season}. This might be because MoP Classic isn't using the expected season ID.` 
+    for (const seasonId of seasonsToTry) {
+      try {
+        console.log(`Trying season ${seasonId}...`);
+        
+        // Try Classic namespace first
+        let apiUrl = `https://${region}.api.blizzard.com/data/wow/pvp-season/${seasonId}/pvp-leaderboard/${bracket}`;
+        let params = new URLSearchParams({
+          namespace: `dynamic-classic-${region}`,
+          locale: 'en_US',
+          access_token: tokenData.access_token
         });
+
+        console.log(`Trying Classic API: ${apiUrl}?${params}`);
+        
+        let leaderboardResponse = await fetch(`${apiUrl}?${params}`, {
+          headers: {
+            'Authorization': `Bearer ${tokenData.access_token}`
+          }
+        });
+
+        // If Classic namespace fails, try regular namespace
+        if (!leaderboardResponse.ok) {
+          console.log(`Classic namespace failed, trying regular namespace...`);
+          params = new URLSearchParams({
+            namespace: `dynamic-${region}`,
+            locale: 'en_US',
+            access_token: tokenData.access_token
+          });
+
+          leaderboardResponse = await fetch(`${apiUrl}?${params}`, {
+            headers: {
+              'Authorization': `Bearer ${tokenData.access_token}`
+            }
+          });
+        }
+
+        if (leaderboardResponse.ok) {
+          const data = await leaderboardResponse.json();
+          if (data.entries && data.entries.length > 0) {
+            leaderboardData = data;
+            console.log(`✅ Success with season ${seasonId}! Found ${data.entries.length} entries`);
+            break;
+          }
+        } else {
+          const errorText = await leaderboardResponse.text();
+          lastError = `Season ${seasonId}: ${leaderboardResponse.status} - ${errorText}`;
+          console.log(lastError);
+        }
+      } catch (err) {
+        lastError = `Season ${seasonId}: ${err.message}`;
+        console.log(lastError);
+        continue;
       }
-      
-      return res.status(500).json({ 
-        error: `Blizzard API error: ${leaderboardResponse.status}` 
-      });
     }
 
-    const leaderboardData = await leaderboardResponse.json();
-    console.log(`Success! Found ${leaderboardData.entries?.length || 0} entries`);
-
-    // Return the data to your frontend
-    res.status(200).json(leaderboardData);
+    if (leaderboardData) {
+      return res.status(200).json(leaderboardData);
+    } else {
+      return res.status(404).json({ 
+        error: `No MoP Classic data found after trying seasons [${seasonsToTry.join(', ')}]. Last error: ${lastError}. This might indicate MoP Classic uses a different API structure.`
+      });
+    }
 
   } catch (error) {
     console.error('API Handler Error:', error);
