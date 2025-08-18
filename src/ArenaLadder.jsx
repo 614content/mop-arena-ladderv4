@@ -11,8 +11,8 @@ const ArenaLadder = () => {
 
   // Static configurations
   const regions = useMemo(() => ({
-    us: { name: "US", flag: "🇺🇸", display: "🇺🇸 US" },
-    eu: { name: "EU", flag: "🇪🇺", display: "🇪🇺 EU" },
+    us: { name: "US", flag: "🇺🇸", display: "🇺🇸" },
+    eu: { name: "EU", flag: "🇪🇺", display: "🇪🇺" },
   }), []);
 
   const classColors = useMemo(() => ({
@@ -291,11 +291,12 @@ const ArenaLadder = () => {
   // Memoized color functions
   const getRankColor = useCallback((rank, totalPlayers = 1000) => {
     const percentage = (rank / totalPlayers) * 100;
-    if (percentage <= 0.1) return "text-orange-400 font-bold";
-    if (percentage <= 0.5) return "text-purple-400 font-bold";
-    if (percentage <= 3.0) return "text-blue-400 font-semibold";
-    if (percentage <= 10.0) return "text-green-400";
-    return "text-gray-400";
+    
+    // WoW PvP Title Cutoffs based on actual percentages
+    if (percentage <= 0.1) return "text-orange-400 font-bold"; // R1 - Orange (Top 0.1%)
+    if (percentage <= 0.5) return "text-purple-400 font-bold"; // Gladiator - Purple (Top 0.5%)
+    if (percentage <= 3.0) return "text-blue-400 font-semibold"; // Duelist - Blue (Top 3%)
+    return "text-gray-400"; // Everything else - Grey
   }, []);
 
   const getRankIcon = useCallback((rank, totalPlayers) => {
