@@ -5,9 +5,14 @@ const ArenaLadder = () => {
   const [selectedBracket, setSelectedBracket] = useState("2v2");
   const [selectedRegion, setSelectedRegion] = useState("us");
   const [ladderData, setLadderData] = useState([]);
+  const [allPlayersData, setAllPlayersData] = useState([]); // Store all 5000 players
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdateTime, setLastUpdateTime] = useState(null);
+  
+  const PLAYERS_PER_PAGE = 50;
 
   // Static configurations
   const regions = useMemo(() => ({
@@ -166,9 +171,17 @@ const ArenaLadder = () => {
       }
 
       if (data.entries?.length > 0) {
-        const players = await parseBlizzardDataEnhanced(data.entries, region);
-        console.log(`✅ Success! Found ${players.length} players from Blizzard API`);
-        setLadderData(players);
+        console.log(`Found ${data.entries.length} total entries from API`);
+        const allPlayers = await parseBlizzardDataEnhanced(data.entries, region);
+        console.log(`✅ Success! Processed ${allPlayers.length} players from Blizzard API`);
+        
+        setAllPlayersData(allPlayers);
+        setTotalPages(Math.ceil(allPlayers.length / PLAYERS_PER_PAGE));
+        setCurrentPage(1);
+        
+        // Set first page of data
+        const firstPageData = allPlayers.slice(0, PLAYERS_PER_PAGE);
+        setLadderData(firstPageData);
         setLastUpdateTime(new Date());
       } else {
         throw new Error("No player data returned from API");
@@ -319,6 +332,25 @@ const ArenaLadder = () => {
     return faction === "Alliance" ? "text-blue-400" : "text-red-400";
   }, []);
 
+  // Pagination functions
+  const goToPage = useCallback((page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      const startIndex = (page - 1) * PLAYERS_PER_PAGE;
+      const endIndex = startIndex + PLAYERS_PER_PAGE;
+      const pageData = allPlayersData.slice(startIndex, endIndex);
+      setLadderData(pageData);
+    }
+  }, [allPlayersData, totalPages]);
+
+  const nextPage = useCallback(() => {
+    goToPage(currentPage + 1);
+  }, [currentPage, goToPage]);
+
+  const prevPage = useCallback(() => {
+    goToPage(currentPage - 1);
+  }, [currentPage, goToPage]);
+
   const formatUpdateTime = useCallback((date) => {
     if (!date) return "Never";
     return date.toLocaleString("en-US", {
@@ -467,7 +499,7 @@ const ArenaLadder = () => {
                       className="hover:bg-slate-750 transition-colors duration-150"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getRankIcon(player.rank, ladderData.length)}
+                        {getRankIcon(player.rank, allPlayersData.length)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div
@@ -505,6 +537,61 @@ const ArenaLadder = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!loading && allPlayersData.length > PLAYERS_PER_PAGE && (
+          <div className="flex justify-center items-center space-x-4 mt-8">
+            <button
+              onClick={prevPage}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 rounded-lg transition-colors duration-200"
+            >
+              Previous
+            </button>
+            
+            <div className="flex items-center space-x-2">
+              {/* Show page numbers */}
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => goToPage(pageNum)}
+                    className={`px-3 py-2 rounded-md transition-colors duration-200 ${
+                      currentPage === pageNum
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-700 hover:bg-slate-600 text-gray-300"
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              onClick={nextPage}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 rounded-lg transition-colors duration-200"
+            >
+              Next
+            </button>
+            
+            <div className="text-sm text-gray-400">
+              Page {currentPage} of {totalPages} ({allPlayersData.length} total players)
             </div>
           </div>
         )}
