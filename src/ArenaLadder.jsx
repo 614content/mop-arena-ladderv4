@@ -11,8 +11,8 @@ const ArenaLadder = () => {
 
   // Static configurations
   const regions = useMemo(() => ({
-    us: { name: "US", flag: "🇺🇸" },
-    eu: { name: "EU", flag: "🇪🇺" },
+    us: { name: "US", flag: "🇺🇸", display: "🇺🇸 US" },
+    eu: { name: "EU", flag: "🇪🇺", display: "🇪🇺 EU" },
   }), []);
 
   const classColors = useMemo(() => ({
@@ -333,8 +333,7 @@ const ArenaLadder = () => {
                     : "text-gray-400 hover:text-white hover:bg-slate-700"
                 }`}
               >
-                <span className="text-lg">{region.flag}</span>
-                <span>{region.name}</span>
+                <span>{region.display}</span>
               </button>
             ))}
           </div>
