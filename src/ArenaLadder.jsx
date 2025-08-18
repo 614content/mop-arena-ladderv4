@@ -91,23 +91,33 @@ const ArenaLadder = () => {
 
   // Parse Blizzard API response
   const parseBlizzardData = (entries) => {
-    return entries.slice(0, 50).map((entry, index) => ({
-      rank: entry.rank || index + 1,
-      player: entry.character?.name || `Player${index + 1}`,
-      class: entry.character?.character_class?.name || getRandomClass(),
-      race: entry.character?.race?.name || "Unknown",
-      spec: entry.character?.active_spec?.name || "Unknown",
-      rating: entry.rating || 2000 + Math.floor(Math.random() * 800),
-      wins:
-        entry.season_match_statistics?.won ||
-        Math.floor(Math.random() * 200) + 50,
-      losses:
-        entry.season_match_statistics?.lost ||
-        Math.floor(Math.random() * 100) + 20,
-      realm: entry.character?.realm?.name || "Unknown",
-      faction:
-        entry.character?.faction?.type === "ALLIANCE" ? "Alliance" : "Horde",
-    }));
+    return entries.slice(0, 50).map((entry, index) => {
+      // Debug logging to see what data we're getting
+      if (index < 3) {
+        console.log(`Player ${index + 1} debug:`, {
+          name: entry.character?.name,
+          race: entry.character?.race?.name,
+          class: entry.character?.character_class?.name,
+          spec: entry.character?.active_spec?.name,
+          realm: entry.character?.realm?.name,
+          faction: entry.character?.faction?.type,
+          fullEntry: entry
+        });
+      }
+
+      return {
+        rank: entry.rank || index + 1,
+        player: entry.character?.name || `Player${index + 1}`,
+        class: entry.character?.character_class?.name || getRandomClass(),
+        race: entry.character?.race?.name || "Unknown",
+        spec: entry.character?.active_spec?.name || "Unknown", 
+        rating: entry.rating || 2000 + Math.floor(Math.random() * 800),
+        wins: entry.season_match_statistics?.won || Math.floor(Math.random() * 200) + 50,
+        losses: entry.season_match_statistics?.lost || Math.floor(Math.random() * 100) + 20,
+        realm: entry.character?.realm?.name || "Unknown",
+        faction: entry.character?.faction?.type === "ALLIANCE" ? "Alliance" : "Horde",
+      };
+    });
   };
 
   // Parse xunamate API response
@@ -414,12 +424,12 @@ const ArenaLadder = () => {
   };
 
   const getClassIcon = (className, race, spec) => {
-    // WoW Race Icons - using actual race icon URLs
+    // WoW Race Icons - using actual race icon URLs from Wowhead
     const getRaceIcon = (raceName) => {
       const raceIcons = {
         "Human": "https://wow.zamimg.com/images/wow/icons/medium/race_human_male.jpg",
-        "Dwarf": "https://wow.zamimg.com/images/wow/icons/medium/race_dwarf_female.jpg", 
-        "Night Elf": "https://wow.zamimg.com/images/wow/icons/medium/race_nightelf_female.jpg",
+        "Dwarf": "https://wow.zamimg.com/images/wow/icons/medium/race_dwarf_female.jpg",
+        "Night Elf": "https://wow.zamimg.com/images/wow/icons/medium/race_nightelf_female.jpg", 
         "Gnome": "https://wow.zamimg.com/images/wow/icons/medium/race_gnome_male.jpg",
         "Draenei": "https://wow.zamimg.com/images/wow/icons/medium/race_draenei_female.jpg",
         "Worgen": "https://wow.zamimg.com/images/wow/icons/medium/race_worgen_male.jpg",
@@ -430,6 +440,8 @@ const ArenaLadder = () => {
         "Blood Elf": "https://wow.zamimg.com/images/wow/icons/medium/race_bloodelf_male.jpg",
         "Goblin": "https://wow.zamimg.com/images/wow/icons/medium/race_goblin_male.jpg",
         "Pandaren": "https://wow.zamimg.com/images/wow/icons/medium/race_pandaren_neutral.jpg",
+        // Add more race variations
+        "Forsaken": "https://wow.zamimg.com/images/wow/icons/medium/race_scourge_male.jpg",
       };
       return raceIcons[raceName] || "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_questionmark.jpg";
     };
@@ -561,10 +573,24 @@ const ArenaLadder = () => {
     fetchMoPClassicData(selectedRegion, selectedBracket);
   }, [selectedBracket, selectedRegion]);
 
-  const getRankIcon = (rank) => {
-    if (rank === 1) return <span className="text-lg font-bold text-orange-400">#{rank}</span>;
-    if (rank <= 3) return <span className="text-lg font-bold text-gray-400">#{rank}</span>;
-    return <span className="text-sm font-bold text-gray-500">#{rank}</span>;
+  const getRankColor = (rank, totalPlayers = 1000) => {
+    // Calculate percentages based on standard PvP cutoffs
+    const r1Cutoff = Math.ceil(totalPlayers * 0.001); // Top 0.1%
+    const gladCutoff = Math.ceil(totalPlayers * 0.005); // Top 0.5%
+    const duelistCutoff = Math.ceil(totalPlayers * 0.03); // Top 3.0%
+    
+    if (rank <= r1Cutoff) return "text-orange-400 font-bold"; // R1 - Orange
+    if (rank <= gladCutoff) return "text-purple-400 font-bold"; // Gladiator - Purple
+    if (rank <= duelistCutoff) return "text-blue-400 font-semibold"; // Duelist - Blue
+    return "text-gray-400"; // Everything else - Grey
+  };
+
+  const getRankIcon = (rank, totalPlayers = 1000) => {
+    const rankColor = getRankColor(rank, totalPlayers);
+    
+    if (rank === 1) return <span className={`text-lg font-bold ${rankColor}`}>#{rank}</span>;
+    if (rank <= 3) return <span className={`text-lg font-bold ${rankColor}`}>#{rank}</span>;
+    return <span className={`text-sm font-bold ${rankColor}`}>#{rank}</span>;
   };
 
   const getRatingColor = (rating) => {
@@ -731,7 +757,7 @@ const ArenaLadder = () => {
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          {getRankIcon(player.rank)}
+                          {getRankIcon(player.rank, ladderData.length)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
