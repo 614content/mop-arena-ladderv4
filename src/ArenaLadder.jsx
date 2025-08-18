@@ -95,6 +95,8 @@ const ArenaLadder = () => {
       rank: entry.rank || index + 1,
       player: entry.character?.name || `Player${index + 1}`,
       class: entry.character?.character_class?.name || getRandomClass(),
+      race: entry.character?.race?.name || "Unknown",
+      spec: entry.character?.active_spec?.name || "Unknown",
       rating: entry.rating || 2000 + Math.floor(Math.random() * 800),
       wins:
         entry.season_match_statistics?.won ||
@@ -222,6 +224,8 @@ const ArenaLadder = () => {
       {
         player: "Shadowmeld",
         class: "Rogue",
+        race: "Night Elf",
+        spec: "Subtlety",
         rating: 2847,
         wins: 234,
         losses: 89,
@@ -230,7 +234,9 @@ const ArenaLadder = () => {
       },
       {
         player: "Unstoppablex",
-        class: "Warrior",
+        class: "Warrior", 
+        race: "Orc",
+        spec: "Arms",
         rating: 2801,
         wins: 198,
         losses: 76,
@@ -407,10 +413,136 @@ const ArenaLadder = () => {
     }));
   };
 
+  const getClassIcon = (className, race, spec) => {
+    // WoW Race Icons - using actual race icon URLs
+    const getRaceIcon = (raceName) => {
+      const raceIcons = {
+        "Human": "https://wow.zamimg.com/images/wow/icons/medium/race_human_male.jpg",
+        "Dwarf": "https://wow.zamimg.com/images/wow/icons/medium/race_dwarf_female.jpg", 
+        "Night Elf": "https://wow.zamimg.com/images/wow/icons/medium/race_nightelf_female.jpg",
+        "Gnome": "https://wow.zamimg.com/images/wow/icons/medium/race_gnome_male.jpg",
+        "Draenei": "https://wow.zamimg.com/images/wow/icons/medium/race_draenei_female.jpg",
+        "Worgen": "https://wow.zamimg.com/images/wow/icons/medium/race_worgen_male.jpg",
+        "Orc": "https://wow.zamimg.com/images/wow/icons/medium/race_orc_male.jpg",
+        "Undead": "https://wow.zamimg.com/images/wow/icons/medium/race_scourge_male.jpg",
+        "Tauren": "https://wow.zamimg.com/images/wow/icons/medium/race_tauren_male.jpg",
+        "Troll": "https://wow.zamimg.com/images/wow/icons/medium/race_troll_male.jpg",
+        "Blood Elf": "https://wow.zamimg.com/images/wow/icons/medium/race_bloodelf_male.jpg",
+        "Goblin": "https://wow.zamimg.com/images/wow/icons/medium/race_goblin_male.jpg",
+        "Pandaren": "https://wow.zamimg.com/images/wow/icons/medium/race_pandaren_neutral.jpg",
+      };
+      return raceIcons[raceName] || "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_questionmark.jpg";
+    };
+
+    // WoW Class Icons
+    const getClassIcon = (className) => {
+      const classIcons = {
+        "Death Knight": "https://wow.zamimg.com/images/wow/icons/medium/classicon_deathknight.jpg",
+        "Druid": "https://wow.zamimg.com/images/wow/icons/medium/classicon_druid.jpg", 
+        "Hunter": "https://wow.zamimg.com/images/wow/icons/medium/classicon_hunter.jpg",
+        "Mage": "https://wow.zamimg.com/images/wow/icons/medium/classicon_mage.jpg",
+        "Monk": "https://wow.zamimg.com/images/wow/icons/medium/classicon_monk.jpg",
+        "Paladin": "https://wow.zamimg.com/images/wow/icons/medium/classicon_paladin.jpg",
+        "Priest": "https://wow.zamimg.com/images/wow/icons/medium/classicon_priest.jpg",
+        "Rogue": "https://wow.zamimg.com/images/wow/icons/medium/classicon_rogue.jpg",
+        "Shaman": "https://wow.zamimg.com/images/wow/icons/medium/classicon_shaman.jpg",
+        "Warlock": "https://wow.zamimg.com/images/wow/icons/medium/classicon_warlock.jpg",
+        "Warrior": "https://wow.zamimg.com/images/wow/icons/medium/classicon_warrior.jpg",
+      };
+      return classIcons[className] || "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_questionmark.jpg";
+    };
+
+    // WoW Spec Icons (specific specialization mappings)
+    const getSpecIcon = (className, specName) => {
+      const specIcons = {
+        // Death Knight
+        "Blood": "https://wow.zamimg.com/images/wow/icons/medium/spell_deathknight_bloodpresence.jpg",
+        "Frost": "https://wow.zamimg.com/images/wow/icons/medium/spell_deathknight_frostpresence.jpg", 
+        "Unholy": "https://wow.zamimg.com/images/wow/icons/medium/spell_deathknight_unholypresence.jpg",
+        
+        // Druid
+        "Balance": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_starfall.jpg",
+        "Feral": "https://wow.zamimg.com/images/wow/icons/medium/ability_druid_catform.jpg",
+        "Guardian": "https://wow.zamimg.com/images/wow/icons/medium/ability_racial_bearform.jpg",
+        "Restoration": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_healingtouch.jpg",
+        
+        // Hunter
+        "Beast Mastery": "https://wow.zamimg.com/images/wow/icons/medium/ability_hunter_bestialdiscipline.jpg",
+        "Marksmanship": "https://wow.zamimg.com/images/wow/icons/medium/ability_hunter_focusedaim.jpg",
+        "Survival": "https://wow.zamimg.com/images/wow/icons/medium/ability_hunter_camouflage.jpg",
+        
+        // Mage
+        "Arcane": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_magicalsentry.jpg",
+        "Fire": "https://wow.zamimg.com/images/wow/icons/medium/spell_fire_firebolt02.jpg",
+        "Frost": "https://wow.zamimg.com/images/wow/icons/medium/spell_frost_frostbolt02.jpg",
+        
+        // Monk
+        "Brewmaster": "https://wow.zamimg.com/images/wow/icons/medium/spell_monk_brewmaster_spec.jpg",
+        "Mistweaver": "https://wow.zamimg.com/images/wow/icons/medium/spell_monk_mistweaver_spec.jpg",
+        "Windwalker": "https://wow.zamimg.com/images/wow/icons/medium/spell_monk_windwalker_spec.jpg",
+        
+        // Paladin
+        "Holy": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_holybolt.jpg",
+        "Protection": "https://wow.zamimg.com/images/wow/icons/medium/ability_paladin_shieldofthetemplar.jpg",
+        "Retribution": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_auraoflight.jpg",
+        
+        // Priest
+        "Discipline": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_powerwordshield.jpg",
+        "Holy": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_guardianspirit.jpg",
+        "Shadow": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_shadowwordpain.jpg",
+        
+        // Rogue
+        "Assassination": "https://wow.zamimg.com/images/wow/icons/medium/ability_rogue_eviscerate.jpg",
+        "Combat": "https://wow.zamimg.com/images/wow/icons/medium/ability_backstab.jpg",
+        "Subtlety": "https://wow.zamimg.com/images/wow/icons/medium/ability_stealth.jpg",
+        
+        // Shaman
+        "Elemental": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_lightning.jpg",
+        "Enhancement": "https://wow.zamimg.com/images/wow/icons/medium/spell_shaman_improvedstormstrike.jpg",
+        "Restoration": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_magicimmunity.jpg",
+        
+        // Warlock
+        "Affliction": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_deathcoil.jpg",
+        "Demonology": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_metamorphosis.jpg",
+        "Destruction": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_rainoffire.jpg",
+        
+        // Warrior
+        "Arms": "https://wow.zamimg.com/images/wow/icons/medium/ability_warrior_savageblow.jpg",
+        "Fury": "https://wow.zamimg.com/images/wow/icons/medium/ability_warrior_innerrage.jpg",
+        "Protection": "https://wow.zamimg.com/images/wow/icons/medium/ability_warrior_defensivestance.jpg",
+      };
+      
+      return specIcons[specName] || getClassIcon(className);
+    };
+
+    return (
+      <div className="flex items-center space-x-1">
+        <img 
+          src={getRaceIcon(race)} 
+          alt={race}
+          className="w-6 h-6 rounded border border-gray-600"
+          title={race}
+        />
+        <img 
+          src={getClassIcon(className)} 
+          alt={className}
+          className="w-6 h-6 rounded border border-gray-600"
+          title={className}
+        />
+        <img 
+          src={getSpecIcon(className, spec)} 
+          alt={spec}
+          className="w-6 h-6 rounded border border-gray-600"
+          title={spec}
+        />
+      </div>
+    );
+  };
+
   const getRandomClass = () => {
     const classes = [
       "Death Knight",
-      "Druid",
+      "Druid", 
       "Hunter",
       "Mage",
       "Monk",
@@ -430,8 +562,8 @@ const ArenaLadder = () => {
   }, [selectedBracket, selectedRegion]);
 
   const getRankIcon = (rank) => {
-    if (rank === 1) return <Trophy className="h-5 w-5 text-yellow-400" />;
-    if (rank <= 3) return <Trophy className="h-5 w-5 text-gray-400" />;
+    if (rank === 1) return <span className="text-lg font-bold text-orange-400">#{rank}</span>;
+    if (rank <= 3) return <span className="text-lg font-bold text-gray-400">#{rank}</span>;
     return <span className="text-sm font-bold text-gray-500">#{rank}</span>;
   };
 
@@ -575,7 +707,7 @@ const ArenaLadder = () => {
                       Player
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Class
+                      Race/Class/Spec
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Rating
@@ -604,21 +736,15 @@ const ArenaLadder = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div
-                          className={`text-sm font-medium ${getRatingColor(
-                            player.rating
-                          )}`}
+                          className={`text-sm font-medium ${
+                            classColors[player.class] || "text-gray-300"
+                          }`}
                         >
                           {player.player}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`text-sm font-medium ${
-                            classColors[player.class] || "text-gray-300"
-                          }`}
-                        >
-                          {player.class}
-                        </span>
+                        {getClassIcon(player.class, player.race, player.spec)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div
@@ -629,9 +755,9 @@ const ArenaLadder = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-300">
-                          <span className="text-green-400">{player.wins}W</span>
+                          <span className="text-green-400">{player.wins}</span>
                           <span className="mx-1">-</span>
-                          <span className="text-red-400">{player.losses}L</span>
+                          <span className="text-red-400">{player.losses}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
