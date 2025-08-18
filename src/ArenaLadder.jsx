@@ -61,36 +61,61 @@ const ArenaLadder = () => {
       "Warrior": "https://wow.zamimg.com/images/wow/icons/medium/classicon_warrior.jpg",
     },
     spec: {
+      // Death Knight
       "Blood": "https://wow.zamimg.com/images/wow/icons/medium/spell_deathknight_bloodpresence.jpg",
       "Frost": "https://wow.zamimg.com/images/wow/icons/medium/spell_deathknight_frostpresence.jpg",
       "Unholy": "https://wow.zamimg.com/images/wow/icons/medium/spell_deathknight_unholypresence.jpg",
+      
+      // Druid
       "Balance": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_starfall.jpg",
       "Feral": "https://wow.zamimg.com/images/wow/icons/medium/ability_druid_catform.jpg",
       "Guardian": "https://wow.zamimg.com/images/wow/icons/medium/ability_racial_bearform.jpg",
       "Restoration": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_healingtouch.jpg",
+      
+      // Hunter
       "Beast Mastery": "https://wow.zamimg.com/images/wow/icons/medium/ability_hunter_bestialdiscipline.jpg",
       "Marksmanship": "https://wow.zamimg.com/images/wow/icons/medium/ability_hunter_focusedaim.jpg",
       "Survival": "https://wow.zamimg.com/images/wow/icons/medium/ability_hunter_camouflage.jpg",
+      
+      // Mage - FIXED Frost icon
       "Arcane": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_magicalsentry.jpg",
-      "Fire": "https://wow.zamimg.com/images/wow/icons/medium/spell_fire_firebolt02.jpg",
+      "Fire": "https://wow.zamimg.com/images/wow/icons/medium/spell_fire_flamebolt.jpg",
+      "Frost": "https://wow.zamimg.com/images/wow/icons/medium/spell_frost_frostbolt02.jpg",
+      
+      // Monk
       "Brewmaster": "https://wow.zamimg.com/images/wow/icons/medium/spell_monk_brewmaster_spec.jpg",
       "Mistweaver": "https://wow.zamimg.com/images/wow/icons/medium/spell_monk_mistweaver_spec.jpg",
       "Windwalker": "https://wow.zamimg.com/images/wow/icons/medium/spell_monk_windwalker_spec.jpg",
+      
+      // Paladin
       "Holy": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_holybolt.jpg",
       "Protection": "https://wow.zamimg.com/images/wow/icons/medium/ability_paladin_shieldofthetemplar.jpg",
       "Retribution": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_auraoflight.jpg",
+      
+      // Priest
       "Discipline": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_powerwordshield.jpg",
+      "Holy": "https://wow.zamimg.com/images/wow/icons/medium/spell_holy_guardianspirit.jpg",
       "Shadow": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_shadowwordpain.jpg",
+      
+      // Rogue
       "Assassination": "https://wow.zamimg.com/images/wow/icons/medium/ability_rogue_eviscerate.jpg",
       "Combat": "https://wow.zamimg.com/images/wow/icons/medium/ability_backstab.jpg",
       "Subtlety": "https://wow.zamimg.com/images/wow/icons/medium/ability_stealth.jpg",
+      
+      // Shaman
       "Elemental": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_lightning.jpg",
       "Enhancement": "https://wow.zamimg.com/images/wow/icons/medium/spell_shaman_improvedstormstrike.jpg",
+      "Restoration": "https://wow.zamimg.com/images/wow/icons/medium/spell_nature_magicimmunity.jpg",
+      
+      // Warlock
       "Affliction": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_deathcoil.jpg",
       "Demonology": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_metamorphosis.jpg",
       "Destruction": "https://wow.zamimg.com/images/wow/icons/medium/spell_shadow_rainoffire.jpg",
+      
+      // Warrior
       "Arms": "https://wow.zamimg.com/images/wow/icons/medium/ability_warrior_savageblow.jpg",
       "Fury": "https://wow.zamimg.com/images/wow/icons/medium/ability_warrior_innerrage.jpg",
+      "Protection": "https://wow.zamimg.com/images/wow/icons/medium/ability_warrior_defensivestance.jpg",
     }
   }), []);
 
@@ -99,12 +124,21 @@ const ArenaLadder = () => {
   // Enhanced character detail fetching with error handling
   const fetchCharacterDetails = useCallback(async (realmSlug, characterName, region) => {
     try {
+      console.log(`🔍 Fetching details for ${characterName} on ${realmSlug} (${region})`);
       const response = await fetch(
         `/api/character-details?region=${region}&realm=${realmSlug}&character=${characterName.toLowerCase()}`
       );
-      return response.ok ? await response.json() : null;
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Got character details for ${characterName}:`, data);
+        return data;
+      } else {
+        console.warn(`❌ Character details failed for ${characterName}: ${response.status}`);
+        return null;
+      }
     } catch (error) {
-      console.warn(`Failed to fetch character details for ${characterName}:`, error);
+      console.warn(`💥 Failed to fetch character details for ${characterName}:`, error);
       return null;
     }
   }, []);
@@ -163,14 +197,18 @@ const ArenaLadder = () => {
         // Get enhanced character details for ALL players
         let characterDetails = null;
         if (entry.character?.realm?.slug && entry.character?.name) {
+          console.log(`Fetching character details for: ${entry.character.name} on ${entry.character.realm.slug}`);
           characterDetails = await fetchCharacterDetails(
             entry.character.realm.slug,
             entry.character.name,
             region
           );
+          console.log(`Character details result for ${entry.character.name}:`, characterDetails);
+        } else {
+          console.warn(`Missing realm/name data for entry:`, entry);
         }
 
-        return {
+        const playerData = {
           rank: entry.rank || index + 1,
           player: entry.character?.name || `Player${index + 1}`,
           class: characterDetails?.character_class?.name || 
@@ -190,6 +228,9 @@ const ArenaLadder = () => {
                  "Unknown",
           faction: determineFaction(characterDetails, entry),
         };
+
+        console.log(`Final player data for ${playerData.player}:`, playerData);
+        return playerData;
       });
       
       const batchResults = await Promise.all(batchPromises);
