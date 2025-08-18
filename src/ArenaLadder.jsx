@@ -11,22 +11,22 @@ const ArenaLadder = () => {
 
   // Static configurations
   const regions = useMemo(() => ({
-    us: { name: "US", flag: "🇺🇸" },
-    eu: { name: "EU", flag: "🇪🇺" },
+    us: { name: "🇺🇸 US", flag: "🇺🇸" },
+    eu: { name: "🇪🇺 EU", flag: "🇪🇺" },
   }), []);
 
   const classColors = useMemo(() => ({
-    "Death Knight": "text-red-400",
-    Druid: "text-orange-400",
-    Hunter: "text-green-400",
-    Mage: "text-blue-400",
-    Monk: "text-teal-400",
-    Paladin: "text-pink-400",
-    Priest: "text-gray-300",
-    Rogue: "text-yellow-400",
-    Shaman: "text-purple-400",
-    Warlock: "text-indigo-400",
-    Warrior: "text-amber-600",
+    "Death Knight": "text-[#C41E3A]", // Death Knight red
+    "Druid": "text-[#FF7C0A]",        // Druid orange
+    "Hunter": "text-[#AAD372]",       // Hunter green
+    "Mage": "text-[#3FC7EB]",         // Mage light blue
+    "Monk": "text-[#00FF98]",         // Monk jade green
+    "Paladin": "text-[#F48CBA]",      // Paladin pink
+    "Priest": "text-[#FFFFFF]",       // Priest white
+    "Rogue": "text-[#FFF468]",        // Rogue yellow
+    "Shaman": "text-[#0070DD]",       // Shaman blue
+    "Warlock": "text-[#8788EE]",      // Warlock purple
+    "Warrior": "text-[#C69B6D]",      // Warrior tan
   }), []);
 
   // Memoized icon mappings for better performance
@@ -333,7 +333,6 @@ const ArenaLadder = () => {
                     : "text-gray-400 hover:text-white hover:bg-slate-700"
                 }`}
               >
-                <span>{region.flag}</span>
                 <span>{region.name}</span>
               </button>
             ))}
