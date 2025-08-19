@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Trophy, Sword, Shield, Users, Flag, RefreshCw, Crown, Award } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Trophy, Sword, Shield, Users, RefreshCw, Crown, Award } from "lucide-react";
 
 const ArenaLadder = () => {
   const [selectedBracket, setSelectedBracket] = useState("2v2");
   const [selectedRegion, setSelectedRegion] = useState("us");
   const [ladderData, setLadderData] = useState([]);
-  const [allBracketData, setAllBracketData] = useState({}); // Store data for all brackets
+  const [allBracketData, setAllBracketData] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdateTime, setLastUpdateTime] = useState(null);
-  const [cutoffData, setCutoffData] = useState({}); // Store real cutoffs from API
-  const [preloadProgress, setPreloadProgress] = useState(0);
+  const [cutoffData, setCutoffData] = useState({});
   
   const PLAYERS_PER_PAGE = 50;
 
@@ -41,29 +40,77 @@ const ArenaLadder = () => {
   const currentBracketData = allBracketData[`${selectedRegion}-${selectedBracket}`] || [];
   const currentCutoffs = cutoffData[`${selectedRegion}-${selectedBracket}`] || {};
 
-  // Fetch real cutoffs from API
+  // Fetch real cutoffs from Blizzard API
   const fetchCutoffs = useCallback(async (region, bracket) => {
     try {
       console.log(`🏆 Fetching cutoffs for ${region} ${bracket}...`);
+      
+      // Try to get cutoffs from Blizzard API first
       const response = await fetch(
-        `/api/cutoffs?region=${region}&bracket=${bracket}&season=12`
+        `/api/pvp-titles?region=${region}&bracket=${bracket}&season=12`
       );
 
       if (response.ok) {
         const data = await response.json();
-        console.log(`✅ Got cutoffs for ${bracket}:`, data);
+        console.log(`✅ Got real cutoffs from Blizzard API:`, data);
         return data;
       } else {
-        console.warn(`❌ Cutoffs failed for ${bracket}: ${response.status}`);
-        return null;
+        console.warn(`❌ Blizzard cutoffs failed, calculating from leaderboard...`);
+        // Fallback to calculated cutoffs
+        return await calculateCutoffsFromLeaderboard(region, bracket);
       }
     } catch (error) {
-      console.warn(`💥 Failed to fetch cutoffs for ${bracket}:`, error);
+      console.warn(`💥 Failed to fetch cutoffs, using fallback:`, error);
+      return await calculateCutoffsFromLeaderboard(region, bracket);
+    }
+  }, []);
+
+  // Fallback: calculate cutoffs from leaderboard data
+  const calculateCutoffsFromLeaderboard = useCallback(async (region, bracket) => {
+    try {
+      const response = await fetch(
+        `/api/leaderboard?region=${region}&bracket=${bracket}&season=12`
+      );
+      
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      if (!data.entries || data.entries.length === 0) return null;
+      
+      const totalPlayers = data.entries.length;
+      const sortedPlayers = data.entries.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      
+      const cutoffs = {};
+      
+      // Use ironforge.pro style cutoffs (more accurate percentages)
+      // R1: ~0.1% (but check actual rank ranges)
+      const r1Count = Math.max(1, Math.ceil(totalPlayers * 0.0006)); // Slightly lower than 0.1%
+      if (sortedPlayers[r1Count - 1]) {
+        cutoffs.r1 = {
+          rank: r1Count,
+          rating: sortedPlayers[r1Count - 1].rating || 0,
+          count: r1Count
+        };
+      }
+      
+      // Gladiator: ~0.5%
+      const gladCount = Math.max(1, Math.ceil(totalPlayers * 0.005));
+      if (sortedPlayers[gladCount - 1]) {
+        cutoffs.gladiator = {
+          rank: gladCount,
+          rating: sortedPlayers[gladCount - 1].rating || 0,
+          count: gladCount
+        };
+      }
+      
+      return cutoffs;
+    } catch (error) {
+      console.error('Failed to calculate cutoffs:', error);
       return null;
     }
   }, []);
 
-  // Rank Cutoffs Component - now using real API data
+  // Rank Cutoffs Component - simplified, no duelist
   const RankCutoffs = () => {
     if (!currentCutoffs.r1 && !currentCutoffs.gladiator) return null;
 
@@ -91,9 +138,6 @@ const ArenaLadder = () => {
                   <Crown className="h-5 w-5 text-orange-400" />
                   <span className="font-bold text-orange-400">Rank 1</span>
                 </div>
-                <span className="text-xs text-orange-300 bg-orange-900/50 px-2 py-1 rounded">
-                  Top {((currentCutoffs.r1.rank / totalPlayers) * 100).toFixed(1)}%
-                </span>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
@@ -103,15 +147,9 @@ const ArenaLadder = () => {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-300 text-sm">Cutoff Rank:</span>
+                  <span className="text-gray-300 text-sm">Ranks:</span>
                   <span className="font-semibold text-orange-300">
-                    #{currentCutoffs.r1.rank}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300 text-sm">Total R1s:</span>
-                  <span className="font-semibold text-orange-300">
-                    {currentCutoffs.r1.count || currentCutoffs.r1.rank} players
+                    ~{currentCutoffs.r1.rangeStart || 1}-{currentCutoffs.r1.rangeEnd || currentCutoffs.r1.rank}
                   </span>
                 </div>
               </div>
@@ -126,9 +164,6 @@ const ArenaLadder = () => {
                   <Award className="h-5 w-5 text-purple-400" />
                   <span className="font-bold text-purple-400">Gladiator</span>
                 </div>
-                <span className="text-xs text-purple-300 bg-purple-900/50 px-2 py-1 rounded">
-                  Top {((currentCutoffs.gladiator.rank / totalPlayers) * 100).toFixed(1)}%
-                </span>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
@@ -138,44 +173,9 @@ const ArenaLadder = () => {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-300 text-sm">Cutoff Rank:</span>
+                  <span className="text-gray-300 text-sm">Ranks:</span>
                   <span className="font-semibold text-purple-300">
-                    #{currentCutoffs.gladiator.rank}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300 text-sm">Total Glads:</span>
-                  <span className="font-semibold text-purple-300">
-                    {currentCutoffs.gladiator.count || currentCutoffs.gladiator.rank} players
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Show Duelist if available */}
-          {currentCutoffs.duelist && (
-            <div className="bg-gradient-to-r from-blue-900/30 to-blue-800/30 border border-blue-600/50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Sword className="h-5 w-5 text-blue-400" />
-                  <span className="font-bold text-blue-400">Duelist</span>
-                </div>
-                <span className="text-xs text-blue-300 bg-blue-900/50 px-2 py-1 rounded">
-                  Top {((currentCutoffs.duelist.rank / totalPlayers) * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300 text-sm">Cutoff Rating:</span>
-                  <span className="font-bold text-blue-400 text-lg">
-                    {currentCutoffs.duelist.rating?.toLocaleString() || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300 text-sm">Cutoff Rank:</span>
-                  <span className="font-semibold text-blue-300">
-                    #{currentCutoffs.duelist.rank}
+                    ~{currentCutoffs.gladiator.rangeStart || (currentCutoffs.r1?.rangeEnd + 1 || 1)}-{currentCutoffs.gladiator.rangeEnd || currentCutoffs.gladiator.rank}
                   </span>
                 </div>
               </div>
@@ -354,14 +354,12 @@ const ArenaLadder = () => {
         setInitialLoading(false);
         
         // Step 4: Background load remaining data
-        setPreloadProgress(0);
         const remainingPlayers = await prefetchRemainingData(region, bracket);
         
         // Step 5: Merge all data
         const allPlayers = [...initialPlayers, ...remainingPlayers];
         setAllBracketData(prev => ({ ...prev, [key]: allPlayers }));
         updatePageData(bracket, region, { ...allBracketData, [key]: allPlayers }, currentPage);
-        setPreloadProgress(100);
         
         setLastUpdateTime(new Date());
         
@@ -398,7 +396,7 @@ const ArenaLadder = () => {
     }
   }, [fetchInitialData, fetchCutoffs, prefetchRemainingData, allBracketData, currentPage]);
 
-  // Enhanced parsing with optional full details
+  // Enhanced parsing with better character data handling
   const parseBlizzardDataEnhanced = useCallback(async (entries, region, withFullDetails = false, startRank = 0) => {
     const players = [];
     console.log(`Processing ${entries.length} players (full details: ${withFullDetails})...`);
@@ -422,31 +420,42 @@ const ArenaLadder = () => {
             );
           }
 
+          // Better data merging - prioritize API data, fallback to leaderboard data
+          const mergedCharacter = {
+            name: entry.character?.name || `Player${rank}`,
+            class: (characterDetails?.character_class?.name || 
+                   entry.character?.character_class?.name || 
+                   characterDetails?.class?.name || 
+                   "Unknown"),
+            race: (characterDetails?.race?.name || 
+                  entry.character?.race?.name || 
+                  "Unknown"),
+            spec: (characterDetails?.active_specialization?.name || 
+                  characterDetails?.active_spec?.name ||
+                  entry.character?.active_spec?.name || 
+                  "Unknown"),
+            realm: (characterDetails?.realm?.name || 
+                   entry.character?.realm?.name || 
+                   "Unknown"),
+            faction: determineFaction(characterDetails, entry)
+          };
+
           return {
             rank,
-            player: entry.character?.name || `Player${rank}`,
-            class: characterDetails?.character_class?.name || entry.character?.character_class?.name || "Unknown",
-            race: characterDetails?.race?.name || entry.character?.race?.name || "Unknown",
-            spec: characterDetails?.active_specialization?.name || entry.character?.active_spec?.name || "Unknown",
+            player: mergedCharacter.name,
+            class: mergedCharacter.class,
+            race: mergedCharacter.race,
+            spec: mergedCharacter.spec,
             rating: entry.rating || 0,
             wins: entry.season_match_statistics?.won || 0,
             losses: entry.season_match_statistics?.lost || 0,
-            realm: characterDetails?.realm?.name || entry.character?.realm?.name || "Unknown",
-            faction: characterDetails?.faction?.type === "ALLIANCE" ? "Alliance" : 
-                    characterDetails?.faction?.type === "HORDE" ? "Horde" :
-                    entry.character?.faction?.type === "ALLIANCE" ? "Alliance" :
-                    entry.character?.faction?.type === "HORDE" ? "Horde" :
-                    Math.random() > 0.5 ? "Alliance" : "Horde",
+            realm: mergedCharacter.realm,
+            faction: mergedCharacter.faction,
           };
         });
         
         const batchResults = await Promise.all(batchPromises);
         players.push(...batchResults);
-        
-        // Update progress
-        if (withFullDetails) {
-          setPreloadProgress(Math.round(((i + batchSize) / entries.length) * 50));
-        }
         
         // Small delay between batches
         if (i + batchSize < entries.length) {
@@ -457,18 +466,22 @@ const ArenaLadder = () => {
       // Process with basic data only (much faster)
       entries.forEach((entry, index) => {
         const rank = startRank + index + 1;
+        
+        // Better fallback data extraction
+        const character = entry.character || {};
+        
         players.push({
           rank,
-          player: entry.character?.name || `Player${rank}`,
-          class: entry.character?.character_class?.name || "Unknown",
-          race: entry.character?.race?.name || "Unknown",
-          spec: entry.character?.active_spec?.name || "Unknown",
+          player: character.name || `Player${rank}`,
+          class: character.character_class?.name || character.class?.name || "Unknown",
+          race: character.race?.name || "Unknown",
+          spec: character.active_spec?.name || character.spec?.name || "Unknown",
           rating: entry.rating || 0,
           wins: entry.season_match_statistics?.won || 0,
           losses: entry.season_match_statistics?.lost || 0,
-          realm: entry.character?.realm?.name || "Unknown",
-          faction: entry.character?.faction?.type === "ALLIANCE" ? "Alliance" : 
-                  entry.character?.faction?.type === "HORDE" ? "Horde" : 
+          realm: character.realm?.name || "Unknown",
+          faction: character.faction?.type === "ALLIANCE" ? "Alliance" : 
+                  character.faction?.type === "HORDE" ? "Horde" : 
                   Math.random() > 0.5 ? "Alliance" : "Horde",
         });
       });
@@ -476,6 +489,28 @@ const ArenaLadder = () => {
 
     return players;
   }, [fetchCharacterDetails]);
+
+  // Better faction determination
+  const determineFaction = useCallback((characterDetails, entry) => {
+    // Check character details first
+    if (characterDetails?.faction?.type === "ALLIANCE") return "Alliance";
+    if (characterDetails?.faction?.type === "HORDE") return "Horde";
+    
+    // Check entry data
+    if (entry.character?.faction?.type === "ALLIANCE") return "Alliance";
+    if (entry.character?.faction?.type === "HORDE") return "Horde";
+    
+    // Determine by race if no faction data
+    const race = characterDetails?.race?.name || entry.character?.race?.name;
+    const allianceRaces = ["Human", "Dwarf", "Night Elf", "Gnome", "Draenei", "Worgen"];
+    const hordeRaces = ["Orc", "Undead", "Tauren", "Troll", "Blood Elf", "Goblin", "Forsaken"];
+    
+    if (race && allianceRaces.includes(race)) return "Alliance";
+    if (race && hordeRaces.includes(race)) return "Horde";
+    
+    // Last resort fallback
+    return Math.random() > 0.5 ? "Alliance" : "Horde";
+  }, []);
 
   // Update page data helper
   const updatePageData = useCallback((bracket, region, bracketData = allBracketData, page = 1) => {
@@ -523,11 +558,10 @@ const ArenaLadder = () => {
     );
   }, [iconMappings, defaultIcon]);
 
-  // Color and styling functions
+  // Color and styling functions using real cutoffs
   const getRankColor = useCallback((rank, cutoffs) => {
-    if (cutoffs.r1 && rank <= cutoffs.r1.rank) return "text-orange-400 font-bold";
-    if (cutoffs.gladiator && rank <= cutoffs.gladiator.rank) return "text-purple-400 font-bold";
-    if (cutoffs.duelist && rank <= cutoffs.duelist.rank) return "text-blue-400 font-semibold";
+    if (cutoffs.r1 && rank <= (cutoffs.r1.rangeEnd || cutoffs.r1.rank)) return "text-orange-400 font-bold";
+    if (cutoffs.gladiator && rank <= (cutoffs.gladiator.rangeEnd || cutoffs.gladiator.rank)) return "text-purple-400 font-bold";
     return "text-gray-400";
   }, []);
 
@@ -638,17 +672,8 @@ const ArenaLadder = () => {
             <div className="text-center">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-400" />
               <h3 className="text-lg font-semibold mb-2">Loading Arena Data</h3>
-              <p className="text-gray-400 mb-4">
-                Fast loading first 50 players with enhanced details...
-              </p>
-              <div className="w-full bg-slate-700 rounded-full h-2 mb-2">
-                <div 
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${preloadProgress}%` }}
-                ></div>
-              </div>
-              <p className="text-xs text-gray-500">
-                {preloadProgress < 50 ? "Loading enhanced player details..." : "Loading remaining players in background..."}
+              <p className="text-gray-400">
+                Loading {regions[selectedRegion].display} {selectedBracket} ladder...
               </p>
             </div>
           </div>
@@ -708,22 +733,6 @@ const ArenaLadder = () => {
 
         {/* Rank Cutoffs */}
         {!initialLoading && currentBracketData.length > 0 && <RankCutoffs />}
-
-        {/* Background Loading Indicator */}
-        {!initialLoading && preloadProgress > 0 && preloadProgress < 100 && (
-          <div className="bg-slate-800/50 rounded-lg p-3 mb-4">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Loading remaining players in background...</span>
-              <span className="text-blue-400">{preloadProgress}%</span>
-            </div>
-            <div className="w-full bg-slate-700 rounded-full h-1 mt-2">
-              <div 
-                className="bg-blue-500 h-1 rounded-full transition-all duration-300"
-                style={{ width: `${preloadProgress}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
 
         {/* Error Message */}
         {error && (
@@ -888,9 +897,6 @@ const ArenaLadder = () => {
         {/* Footer */}
         <div className="text-center mt-8 text-gray-500 text-sm">
           <p>MoP Classic Arena Ladder • Powered by Blizzard API</p>
-          {preloadProgress === 100 && (
-            <p className="mt-1 text-xs text-green-400">✅ All data loaded</p>
-          )}
         </div>
       </div>
     </div>
