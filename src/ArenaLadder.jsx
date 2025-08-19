@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Trophy, Sword, Shield, Users, Flag, RefreshCw } from "lucide-react";
+import { Trophy, Sword, Shield, Users, Flag, RefreshCw, Crown, Award } from "lucide-react";
 
 const ArenaLadder = () => {
   const [selectedBracket, setSelectedBracket] = useState("2v2");
@@ -33,6 +33,120 @@ const ArenaLadder = () => {
     "Warlock": "text-[#8788EE]",      // Warlock purple
     "Warrior": "text-[#C69B6D]",      // Warrior tan
   }), []);
+
+  // Calculate rank cutoffs
+  const rankCutoffs = useMemo(() => {
+    const totalPlayers = allPlayersData.length;
+    if (totalPlayers === 0) return { r1: null, gladiator: null };
+
+    const r1Cutoff = Math.max(1, Math.ceil(totalPlayers * 0.001)); // Top 0.1%
+    const gladiatorCutoff = Math.max(1, Math.ceil(totalPlayers * 0.005)); // Top 0.5%
+
+    const r1Player = allPlayersData[r1Cutoff - 1];
+    const gladiatorPlayer = allPlayersData[gladiatorCutoff - 1];
+
+    return {
+      r1: {
+        rank: r1Cutoff,
+        rating: r1Player?.rating || 0,
+        count: r1Cutoff
+      },
+      gladiator: {
+        rank: gladiatorCutoff,
+        rating: gladiatorPlayer?.rating || 0,
+        count: gladiatorCutoff
+      },
+      totalPlayers
+    };
+  }, [allPlayersData]);
+
+  // Rank Cutoffs Component
+  const RankCutoffs = () => {
+    if (!rankCutoffs.r1 || !rankCutoffs.gladiator) return null;
+
+    return (
+      <div className="bg-slate-800 rounded-lg shadow-xl p-6 mb-6">
+        <div className="text-center mb-4">
+          <h2 className="text-xl font-bold text-gray-200 flex items-center justify-center gap-2">
+            <Trophy className="h-5 w-5 text-yellow-400" />
+            Season 12 Rank Cutoffs
+            <Trophy className="h-5 w-5 text-yellow-400" />
+          </h2>
+          <p className="text-sm text-gray-400 mt-1">
+            {selectedBracket} • {regions[selectedRegion].display} • {rankCutoffs.totalPlayers} players
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Rank 1 Cutoff */}
+          <div className="bg-gradient-to-r from-orange-900/30 to-orange-800/30 border border-orange-600/50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Crown className="h-5 w-5 text-orange-400" />
+                <span className="font-bold text-orange-400">Rank 1</span>
+              </div>
+              <span className="text-xs text-orange-300 bg-orange-900/50 px-2 py-1 rounded">
+                Top 0.1%
+              </span>
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300 text-sm">Cutoff Rating:</span>
+                <span className="font-bold text-orange-400 text-lg">
+                  {rankCutoffs.r1.rating.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300 text-sm">Cutoff Rank:</span>
+                <span className="font-semibold text-orange-300">
+                  #{rankCutoffs.r1.rank}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300 text-sm">Total R1s:</span>
+                <span className="font-semibold text-orange-300">
+                  {rankCutoffs.r1.count} players
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Gladiator Cutoff */}
+          <div className="bg-gradient-to-r from-purple-900/30 to-purple-800/30 border border-purple-600/50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Award className="h-5 w-5 text-purple-400" />
+                <span className="font-bold text-purple-400">Gladiator</span>
+              </div>
+              <span className="text-xs text-purple-300 bg-purple-900/50 px-2 py-1 rounded">
+                Top 0.5%
+              </span>
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300 text-sm">Cutoff Rating:</span>
+                <span className="font-bold text-purple-400 text-lg">
+                  {rankCutoffs.gladiator.rating.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300 text-sm">Cutoff Rank:</span>
+                <span className="font-semibold text-purple-300">
+                  #{rankCutoffs.gladiator.rank}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300 text-sm">Total Glads:</span>
+                <span className="font-semibold text-purple-300">
+                  {rankCutoffs.gladiator.count} players
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Memoized icon mappings for better performance
   const iconMappings = useMemo(() => ({
@@ -442,6 +556,9 @@ const ArenaLadder = () => {
             <span>Refresh</span>
           </button>
         </div>
+
+        {/* Rank Cutoffs */}
+        {!loading && allPlayersData.length > 0 && <RankCutoffs />}
 
         {/* Error Message */}
         {error && (
