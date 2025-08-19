@@ -329,32 +329,57 @@ const ArenaLadder = () => {
   }, [selectedBracket]);
 
   // Helper function to update page data
-  const updatePageData = useCallback((bracket, region, bracketData = allBracketData, page = currentPage) => {
+  const updatePageData = useCallback((bracket, region, bracketData = allBracketData, page = 1) => {
+    console.log(`updatePageData called: ${bracket}, ${region}, page ${page}`); // Debug log
+    
     const data = bracketData[`${region}-${bracket}`] || [];
-    const totalPages = Math.ceil(data.length / PLAYERS_PER_PAGE);
+    console.log(`Data length: ${data.length}`); // Debug log
+    
+    const newTotalPages = Math.ceil(data.length / PLAYERS_PER_PAGE);
     const startIndex = (page - 1) * PLAYERS_PER_PAGE;
     const endIndex = startIndex + PLAYERS_PER_PAGE;
     const pageData = data.slice(startIndex, endIndex);
     
+    console.log(`Page ${page}: showing ${pageData.length} players (${startIndex}-${endIndex})`); // Debug log
+    
     setLadderData(pageData);
-    setTotalPages(totalPages);
+    setTotalPages(newTotalPages);
     setCurrentPage(page);
-  }, [allBracketData, currentPage]);
+  }, [allBracketData]);
 
-  // Optimized parsing - process ALL entries with full character details
+  // Fast parsing - use basic data from leaderboard, only fetch details for top players
   const parseBlizzardDataEnhanced = useCallback(async (entries, region) => {
     const players = [];
-    const batchSize = 25; // Optimized batch size for all players
+    console.log(`Processing ${entries.length} players from API (fast mode)...`);
 
-    console.log(`Processing ALL ${entries.length} players from API...`);
+    // Process most players with basic data (no API calls)
+    const basicPlayers = entries.map((entry, index) => ({
+      rank: entry.rank || index + 1,
+      player: entry.character?.name || `Player${index + 1}`,
+      class: entry.character?.character_class?.name || "Unknown",
+      race: entry.character?.race?.name || "Unknown", 
+      spec: entry.character?.active_spec?.name || "Unknown",
+      rating: entry.rating || 0,
+      wins: entry.season_match_statistics?.won || 0,
+      losses: entry.season_match_statistics?.lost || 0,
+      realm: entry.character?.realm?.name || "Unknown",
+      faction: entry.character?.faction?.type === "ALLIANCE" ? "Alliance" : 
+               entry.character?.faction?.type === "HORDE" ? "Horde" : 
+               Math.random() > 0.5 ? "Alliance" : "Horde", // Fallback
+    }));
 
-    for (let i = 0; i < entries.length; i += batchSize) {
-      const batch = entries.slice(i, i + batchSize);
+    // Only fetch detailed info for top 50 players (for enhanced data)
+    const topPlayers = entries.slice(0, 50);
+    const batchSize = 10;
+    
+    console.log(`Fetching enhanced details for top 50 players...`);
+    
+    for (let i = 0; i < topPlayers.length; i += batchSize) {
+      const batch = topPlayers.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (entry, batchIndex) => {
         const index = i + batchIndex;
         
-        // Fetch character details for ALL players - this is no longer MVP
         let characterDetails = null;
         if (entry.character?.realm?.slug && entry.character?.name) {
           characterDetails = await fetchCharacterDetails(
@@ -364,46 +389,31 @@ const ArenaLadder = () => {
           );
         }
 
-        const playerData = {
-          rank: entry.rank || index + 1,
-          player: entry.character?.name || `Player${index + 1}`,
-          class: characterDetails?.character_class?.name || 
-                 entry.character?.character_class?.name || 
-                 "Unknown",
-          race: characterDetails?.race?.name || 
-                entry.character?.race?.name || 
-                "Unknown",
-          spec: characterDetails?.active_specialization?.name || 
-                entry.character?.active_spec?.name || 
-                "Unknown",
-          rating: entry.rating || 0,
-          wins: entry.season_match_statistics?.won || 0,
-          losses: entry.season_match_statistics?.lost || 0,
-          realm: characterDetails?.realm?.name || 
-                 entry.character?.realm?.name || 
-                 "Unknown",
-          faction: determineFaction(characterDetails, entry),
-        };
-
-        return playerData;
+        // Update the basic player data with enhanced details
+        if (characterDetails) {
+          basicPlayers[index] = {
+            ...basicPlayers[index],
+            class: characterDetails.character_class?.name || basicPlayers[index].class,
+            race: characterDetails.race?.name || basicPlayers[index].race,
+            spec: characterDetails.active_specialization?.name || basicPlayers[index].spec,
+            realm: characterDetails.realm?.name || basicPlayers[index].realm,
+            faction: characterDetails.faction?.type === "ALLIANCE" ? "Alliance" : 
+                    characterDetails.faction?.type === "HORDE" ? "Horde" : 
+                    basicPlayers[index].faction,
+          };
+        }
       });
       
-      const batchResults = await Promise.all(batchPromises);
-      players.push(...batchResults);
+      await Promise.all(batchPromises);
       
-      // Show progress every 250 players
-      if (i % 250 === 0 && i > 0) {
-        console.log(`Processed ${i + batchResults.length}/${entries.length} players...`);
-      }
-      
-      // Small delay to prevent overwhelming the API
-      if (i + batchSize < entries.length) {
+      // Small delay between batches
+      if (i + batchSize < topPlayers.length) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
-    console.log(`✅ Finished processing ALL ${players.length} players with full details`);
-    return players;
+    console.log(`✅ Processed ${basicPlayers.length} players (enhanced details for top 50)`);
+    return basicPlayers;
   }, [fetchCharacterDetails]);
 
   // Helper function to determine faction
@@ -483,18 +493,21 @@ const ArenaLadder = () => {
   // Updated pagination functions to work with current bracket data
   const goToPage = useCallback((page) => {
     if (page >= 1 && page <= totalPages) {
+      console.log(`Going to page ${page}`); // Debug log
       updatePageData(selectedBracket, selectedRegion, allBracketData, page);
     }
   }, [selectedBracket, selectedRegion, allBracketData, totalPages, updatePageData]);
 
   const nextPage = useCallback(() => {
     if (currentPage < totalPages) {
+      console.log(`Next page: ${currentPage + 1}`); // Debug log
       goToPage(currentPage + 1);
     }
   }, [currentPage, totalPages, goToPage]);
 
   const prevPage = useCallback(() => {
     if (currentPage > 1) {
+      console.log(`Previous page: ${currentPage - 1}`); // Debug log
       goToPage(currentPage - 1);
     }
   }, [currentPage, goToPage]);
@@ -618,7 +631,7 @@ const ArenaLadder = () => {
               Loading {regions[selectedRegion].display} Arena Data...
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              Processing all players with full character details
+              Processing thousands of players (enhanced details for top 50)
             </p>
             <div className="mt-4 text-xs text-gray-600">
               Loading 2v2, 3v3, and 5v5 brackets
@@ -733,7 +746,11 @@ const ArenaLadder = () => {
                 return (
                   <button
                     key={pageNum}
-                    onClick={() => goToPage(pageNum)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      console.log(`Button clicked for page ${pageNum}`);
+                      goToPage(pageNum);
+                    }}
                     className={`px-3 py-2 rounded-md transition-colors duration-200 ${
                       currentPage === pageNum
                         ? "bg-blue-600 text-white"
