@@ -8,7 +8,7 @@ const ArenaLadder = () => {
   const [allBracketData, setAllBracketData] = useState({}); // Store data for all brackets
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Changed from true to false
   const [error, setError] = useState("");
   const [lastUpdateTime, setLastUpdateTime] = useState(null);
   
@@ -341,12 +341,12 @@ const ArenaLadder = () => {
     setCurrentPage(page);
   }, [allBracketData, currentPage]);
 
-  // Optimized parsing - process ALL entries, not just 50
+  // Optimized parsing - process ALL entries with full character details
   const parseBlizzardDataEnhanced = useCallback(async (entries, region) => {
     const players = [];
-    const batchSize = 20; // Increased batch size for better performance
+    const batchSize = 25; // Optimized batch size for all players
 
-    console.log(`Processing ${entries.length} total players from API...`);
+    console.log(`Processing ALL ${entries.length} players from API...`);
 
     for (let i = 0; i < entries.length; i += batchSize) {
       const batch = entries.slice(i, i + batchSize);
@@ -354,10 +354,9 @@ const ArenaLadder = () => {
       const batchPromises = batch.map(async (entry, batchIndex) => {
         const index = i + batchIndex;
         
-        // For efficiency, only fetch detailed character info for top 200 players
-        // For others, use basic info from the leaderboard entry
+        // Fetch character details for ALL players - this is no longer MVP
         let characterDetails = null;
-        if (index < 200 && entry.character?.realm?.slug && entry.character?.name) {
+        if (entry.character?.realm?.slug && entry.character?.name) {
           characterDetails = await fetchCharacterDetails(
             entry.character.realm.slug,
             entry.character.name,
@@ -392,18 +391,18 @@ const ArenaLadder = () => {
       const batchResults = await Promise.all(batchPromises);
       players.push(...batchResults);
       
-      // Show progress every 500 players
-      if (i % 500 === 0 && i > 0) {
+      // Show progress every 250 players
+      if (i % 250 === 0 && i > 0) {
         console.log(`Processed ${i + batchResults.length}/${entries.length} players...`);
       }
       
-      // Minimal rate limiting
+      // Small delay to prevent overwhelming the API
       if (i + batchSize < entries.length) {
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
-    console.log(`✅ Finished processing ${players.length} players`);
+    console.log(`✅ Finished processing ALL ${players.length} players with full details`);
     return players;
   }, [fetchCharacterDetails]);
 
@@ -518,7 +517,7 @@ const ArenaLadder = () => {
     fetchAllBracketsData(selectedRegion);
   }, [fetchAllBracketsData, selectedRegion]);
 
-  // Load all bracket data when region changes
+  // Load all bracket data when region changes - automatically on startup
   useEffect(() => {
     fetchAllBracketsData(selectedRegion);
   }, [selectedRegion, fetchAllBracketsData]);
@@ -611,13 +610,19 @@ const ArenaLadder = () => {
           </div>
         )}
 
-        {/* Loading State */}
+        {/* Loading State - show when actually loading */}
         {loading && (
           <div className="text-center py-12">
             <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-400" />
-            <p className="text-gray-400">
-              Fetching arena data...
+            <p className="text-gray-400 text-lg">
+              Loading {regions[selectedRegion].display} Arena Data...
             </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Processing all players with full character details
+            </p>
+            <div className="mt-4 text-xs text-gray-600">
+              Loading 2v2, 3v3, and 5v5 brackets
+            </div>
           </div>
         )}
 
