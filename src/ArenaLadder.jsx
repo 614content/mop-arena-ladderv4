@@ -5,9 +5,7 @@ const ArenaLadder = () => {
   const [selectedBracket, setSelectedBracket] = useState("2v2");
   const [selectedRegion, setSelectedRegion] = useState("us");
   const [ladderData, setLadderData] = useState([]);
-  // Store API cutoff data along with player data
   const [allBracketData, setAllBracketData] = useState({}); // Store data for all brackets
-  const [apiCutoffs, setApiCutoffs] = useState({}); // Store API cutoff data
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false); // Changed from true to false
@@ -39,28 +37,16 @@ const ArenaLadder = () => {
   // Get current bracket data
   const currentBracketData = allBracketData[`${selectedRegion}-${selectedBracket}`] || [];
 
-  // Calculate rank cutoffs from API data (not manual calculation)
+  // Calculate rank cutoffs from current bracket data
   const rankCutoffs = useMemo(() => {
-    const bracketKey = `${selectedRegion}-${selectedBracket}`;
     const totalPlayers = currentBracketData.length;
-    
-    // First, try to get cutoffs from API
-    const apiCutoffData = apiCutoffs[bracketKey];
-    if (apiCutoffData) {
-      console.log("Using API cutoffs:", apiCutoffData);
-      return {
-        r1: apiCutoffData.r1,
-        gladiator: apiCutoffData.gladiator,
-        totalPlayers
-      };
-    }
-    
-    // Fallback to calculation if API doesn't provide cutoffs
     if (totalPlayers === 0) return { r1: null, gladiator: null };
 
-    console.log("Falling back to calculated cutoffs for", bracketKey);
+    // Find actual R1 and Gladiator cutoffs from the data
+    // Sort players by rating (should already be sorted from API)
     const sortedPlayers = [...currentBracketData].sort((a, b) => b.rating - a.rating);
     
+    // For now, use the traditional percentage approach until we get API cutoff data
     const r1Count = Math.max(1, Math.ceil(totalPlayers * 0.001)); // Top 0.1%
     const gladiatorCount = Math.max(1, Math.ceil(totalPlayers * 0.005)); // Top 0.5%
 
@@ -80,7 +66,7 @@ const ArenaLadder = () => {
       },
       totalPlayers
     };
-  }, [currentBracketData, apiCutoffs, selectedRegion, selectedBracket]);
+  }, [currentBracketData]);
 
   // Rank Cutoffs Component
   const RankCutoffs = () => {
@@ -304,69 +290,30 @@ const ArenaLadder = () => {
 
         const data = await response.json();
 
-        // DEBUG: Log the full API response to see cutoff data
-        console.log(`\n=== FULL API RESPONSE FOR ${bracket.toUpperCase()} ===`);
-        console.log("Complete response:", data);
-        console.log("Response keys:", Object.keys(data));
-        console.log("Entries length:", data.entries?.length);
-        
-        // Look for cutoff data in various possible locations
-        if (data.cutoffs) console.log("Found cutoffs:", data.cutoffs);
-        if (data.season_cutoffs) console.log("Found season_cutoffs:", data.season_cutoffs);
-        if (data.title_cutoffs) console.log("Found title_cutoffs:", data.title_cutoffs);
-        if (data.rank_cutoffs) console.log("Found rank_cutoffs:", data.rank_cutoffs);
-        if (data.meta) console.log("Found meta:", data.meta);
-        if (data.season) console.log("Found season:", data.season);
-        console.log("=== END API RESPONSE ===\n");
-
         if (data.error) {
           throw new Error(`${bracket}: ${data.error}`);
         }
 
         if (data.entries?.length > 0) {
           console.log(`Found ${data.entries.length} total entries for ${bracket}`);
-          
-          // Extract cutoffs from API if available
-          let cutoffData = null;
-          
-          // Try different possible locations for cutoff data
-          if (data.cutoffs) {
-            cutoffData = extractCutoffsFromAPI(data.cutoffs, bracket);
-          } else if (data.season_cutoffs) {
-            cutoffData = extractCutoffsFromAPI(data.season_cutoffs, bracket);
-          } else if (data.title_cutoffs) {
-            cutoffData = extractCutoffsFromAPI(data.title_cutoffs, bracket);
-          } else if (data.rank_cutoffs) {
-            cutoffData = extractCutoffsFromAPI(data.rank_cutoffs, bracket);
-          } else {
-            console.log(`No cutoff data found in API for ${bracket}`);
-          }
-          
           const allPlayers = await parseBlizzardDataEnhanced(data.entries, region);
           console.log(`✅ Processed ${allPlayers.length} players for ${bracket}`);
-          return { bracket, players: allPlayers, cutoffs: cutoffData };
+          return { bracket, players: allPlayers };
         } else {
           console.warn(`No data for ${bracket}`);
-          return { bracket, players: [], cutoffs: null };
+          return { bracket, players: [] };
         }
       });
 
       const results = await Promise.all(bracketPromises);
       
-      // Store all bracket data and cutoffs
+      // Store all bracket data
       const newBracketData = {};
-      const newApiCutoffs = {};
-      
-      results.forEach(({ bracket, players, cutoffs }) => {
+      results.forEach(({ bracket, players }) => {
         newBracketData[`${region}-${bracket}`] = players;
-        if (cutoffs) {
-          newApiCutoffs[`${region}-${bracket}`] = cutoffs;
-          console.log(`Stored API cutoffs for ${region}-${bracket}:`, cutoffs);
-        }
       });
       
       setAllBracketData(prev => ({ ...prev, ...newBracketData }));
-      setApiCutoffs(prev => ({ ...prev, ...newApiCutoffs }));
       setLastUpdateTime(new Date());
       
       // Set initial page data for current bracket
@@ -467,60 +414,7 @@ const ArenaLadder = () => {
 
     console.log(`✅ Processed ${basicPlayers.length} players (enhanced details for top 50)`);
     return basicPlayers;
-  // Helper function to extract cutoffs from API response
-  const extractCutoffsFromAPI = useCallback((cutoffData, bracket) => {
-    console.log(`Extracting cutoffs for ${bracket} from:`, cutoffData);
-    
-    // The API might structure cutoffs differently, so we need to check various formats
-    let r1Data = null;
-    let gladiatorData = null;
-    
-    // Format 1: Direct cutoff values
-    if (cutoffData.rank_1 || cutoffData.r1) {
-      r1Data = cutoffData.rank_1 || cutoffData.r1;
-    }
-    if (cutoffData.gladiator || cutoffData.glad) {
-      gladiatorData = cutoffData.gladiator || cutoffData.glad;
-    }
-    
-    // Format 2: Array of cutoffs
-    if (Array.isArray(cutoffData)) {
-      cutoffData.forEach(cutoff => {
-        if (cutoff.title === "Rank 1" || cutoff.title === "R1") {
-          r1Data = cutoff;
-        } else if (cutoff.title === "Gladiator") {
-          gladiatorData = cutoff;
-        }
-      });
-    }
-    
-    // Format 3: Nested object
-    if (cutoffData.titles) {
-      r1Data = cutoffData.titles.rank_1 || cutoffData.titles.r1;
-      gladiatorData = cutoffData.titles.gladiator;
-    }
-    
-    if (r1Data || gladiatorData) {
-      const result = {
-        r1: r1Data ? {
-          rating: r1Data.rating || r1Data.cutoff || 0,
-          rank: r1Data.rank || r1Data.position || 1,
-          count: r1Data.count || r1Data.players || 1
-        } : null,
-        gladiator: gladiatorData ? {
-          rating: gladiatorData.rating || gladiatorData.cutoff || 0,
-          rank: gladiatorData.rank || gladiatorData.position || 1,
-          count: gladiatorData.count || gladiatorData.players || 1
-        } : null
-      };
-      
-      console.log(`Extracted cutoffs for ${bracket}:`, result);
-      return result;
-    }
-    
-    console.log(`Could not extract cutoffs for ${bracket} from:`, cutoffData);
-    return null;
-  }, []);
+  }, [fetchCharacterDetails]);
 
   // Helper function to determine faction
   const determineFaction = useCallback((characterDetails, entry) => {
