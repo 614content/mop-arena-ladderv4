@@ -5,7 +5,7 @@ const ArenaLadder = () => {
   const [selectedBracket, setSelectedBracket] = useState("2v2");
   const [selectedRegion, setSelectedRegion] = useState("us");
   const [ladderData, setLadderData] = useState([]);
-  const [allPlayersData, setAllPlayersData] = useState([]); // Store all 5000 players
+  const [allBracketData, setAllBracketData] = useState({}); // Store data for all brackets
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -34,31 +34,39 @@ const ArenaLadder = () => {
     "Warrior": "text-[#C69B6D]",      // Warrior tan
   }), []);
 
-  // Calculate rank cutoffs
+  // Get current bracket data
+  const currentBracketData = allBracketData[`${selectedRegion}-${selectedBracket}`] || [];
+
+  // Calculate rank cutoffs from current bracket data
   const rankCutoffs = useMemo(() => {
-    const totalPlayers = allPlayersData.length;
+    const totalPlayers = currentBracketData.length;
     if (totalPlayers === 0) return { r1: null, gladiator: null };
 
-    const r1Cutoff = Math.max(1, Math.ceil(totalPlayers * 0.001)); // Top 0.1%
-    const gladiatorCutoff = Math.max(1, Math.ceil(totalPlayers * 0.005)); // Top 0.5%
+    // Find actual R1 and Gladiator cutoffs from the data
+    // Sort players by rating (should already be sorted from API)
+    const sortedPlayers = [...currentBracketData].sort((a, b) => b.rating - a.rating);
+    
+    // For now, use the traditional percentage approach until we get API cutoff data
+    const r1Count = Math.max(1, Math.ceil(totalPlayers * 0.001)); // Top 0.1%
+    const gladiatorCount = Math.max(1, Math.ceil(totalPlayers * 0.005)); // Top 0.5%
 
-    const r1Player = allPlayersData[r1Cutoff - 1];
-    const gladiatorPlayer = allPlayersData[gladiatorCutoff - 1];
+    const r1Player = sortedPlayers[r1Count - 1];
+    const gladiatorPlayer = sortedPlayers[gladiatorCount - 1];
 
     return {
       r1: {
-        rank: r1Cutoff,
+        rank: r1Count,
         rating: r1Player?.rating || 0,
-        count: r1Cutoff
+        count: r1Count
       },
       gladiator: {
-        rank: gladiatorCutoff,
+        rank: gladiatorCount,
         rating: gladiatorPlayer?.rating || 0,
-        count: gladiatorCutoff
+        count: gladiatorCount
       },
       totalPlayers
     };
-  }, [allPlayersData]);
+  }, [currentBracketData]);
 
   // Rank Cutoffs Component
   const RankCutoffs = () => {
@@ -262,44 +270,55 @@ const ArenaLadder = () => {
     }
   }, []);
 
-  // Streamlined data fetching
-  const fetchMoPClassicData = useCallback(async (region, bracket) => {
+  // Streamlined data fetching - now loads all brackets for a region
+  const fetchAllBracketsData = useCallback(async (region) => {
     setLoading(true);
     setError("");
 
     try {
-      console.log(`Fetching ${region} ${bracket} from backend API...`);
+      const brackets = ["2v2", "3v3", "5v5"];
+      const bracketPromises = brackets.map(async (bracket) => {
+        console.log(`Fetching ${region} ${bracket} from backend API...`);
 
-      const response = await fetch(
-        `/api/leaderboard?region=${region}&bracket=${bracket}&season=12`
-      );
+        const response = await fetch(
+          `/api/leaderboard?region=${region}&bracket=${bracket}&season=12`
+        );
 
-      if (!response.ok) {
-        throw new Error(`Backend API failed: ${response.status}`);
-      }
+        if (!response.ok) {
+          throw new Error(`Backend API failed for ${bracket}: ${response.status}`);
+        }
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
+        if (data.error) {
+          throw new Error(`${bracket}: ${data.error}`);
+        }
 
-      if (data.entries?.length > 0) {
-        console.log(`Found ${data.entries.length} total entries from API`);
-        const allPlayers = await parseBlizzardDataEnhanced(data.entries, region);
-        console.log(`✅ Success! Processed ${allPlayers.length} players from Blizzard API`);
-        
-        setAllPlayersData(allPlayers);
-        setTotalPages(Math.ceil(allPlayers.length / PLAYERS_PER_PAGE));
-        setCurrentPage(1);
-        
-        // Set first page of data
-        const firstPageData = allPlayers.slice(0, PLAYERS_PER_PAGE);
-        setLadderData(firstPageData);
-        setLastUpdateTime(new Date());
-      } else {
-        throw new Error("No player data returned from API");
-      }
+        if (data.entries?.length > 0) {
+          console.log(`Found ${data.entries.length} total entries for ${bracket}`);
+          const allPlayers = await parseBlizzardDataEnhanced(data.entries, region);
+          console.log(`✅ Processed ${allPlayers.length} players for ${bracket}`);
+          return { bracket, players: allPlayers };
+        } else {
+          console.warn(`No data for ${bracket}`);
+          return { bracket, players: [] };
+        }
+      });
+
+      const results = await Promise.all(bracketPromises);
+      
+      // Store all bracket data
+      const newBracketData = {};
+      results.forEach(({ bracket, players }) => {
+        newBracketData[`${region}-${bracket}`] = players;
+      });
+      
+      setAllBracketData(prev => ({ ...prev, ...newBracketData }));
+      setLastUpdateTime(new Date());
+      
+      // Set initial page data for current bracket
+      updatePageData(selectedBracket, region, newBracketData, 1);
+      
     } catch (err) {
       console.error("Backend API failed:", err);
       setError(`API Error: ${err.message}`);
@@ -307,32 +326,43 @@ const ArenaLadder = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedBracket]);
 
-  // Optimized parsing with complete character details for all players
+  // Helper function to update page data
+  const updatePageData = useCallback((bracket, region, bracketData = allBracketData, page = currentPage) => {
+    const data = bracketData[`${region}-${bracket}`] || [];
+    const totalPages = Math.ceil(data.length / PLAYERS_PER_PAGE);
+    const startIndex = (page - 1) * PLAYERS_PER_PAGE;
+    const endIndex = startIndex + PLAYERS_PER_PAGE;
+    const pageData = data.slice(startIndex, endIndex);
+    
+    setLadderData(pageData);
+    setTotalPages(totalPages);
+    setCurrentPage(page);
+  }, [allBracketData, currentPage]);
+
+  // Optimized parsing - process ALL entries, not just 50
   const parseBlizzardDataEnhanced = useCallback(async (entries, region) => {
     const players = [];
-    const limitedEntries = entries.slice(0, 50);
-    const batchSize = 8; // Optimized batch size for all character details
+    const batchSize = 20; // Increased batch size for better performance
 
-    for (let i = 0; i < limitedEntries.length; i += batchSize) {
-      const batch = limitedEntries.slice(i, i + batchSize);
+    console.log(`Processing ${entries.length} total players from API...`);
+
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (entry, batchIndex) => {
         const index = i + batchIndex;
         
-        // Get enhanced character details for ALL players
+        // For efficiency, only fetch detailed character info for top 200 players
+        // For others, use basic info from the leaderboard entry
         let characterDetails = null;
-        if (entry.character?.realm?.slug && entry.character?.name) {
-          console.log(`Fetching character details for: ${entry.character.name} on ${entry.character.realm.slug}`);
+        if (index < 200 && entry.character?.realm?.slug && entry.character?.name) {
           characterDetails = await fetchCharacterDetails(
             entry.character.realm.slug,
             entry.character.name,
             region
           );
-          console.log(`Character details result for ${entry.character.name}:`, characterDetails);
-        } else {
-          console.warn(`Missing realm/name data for entry:`, entry);
         }
 
         const playerData = {
@@ -356,19 +386,24 @@ const ArenaLadder = () => {
           faction: determineFaction(characterDetails, entry),
         };
 
-        console.log(`Final player data for ${playerData.player}:`, playerData);
         return playerData;
       });
       
       const batchResults = await Promise.all(batchPromises);
       players.push(...batchResults);
       
-      // Rate limiting for API stability
-      if (i + batchSize < limitedEntries.length) {
-        await new Promise(resolve => setTimeout(resolve, 150));
+      // Show progress every 500 players
+      if (i % 500 === 0 && i > 0) {
+        console.log(`Processed ${i + batchResults.length}/${entries.length} players...`);
+      }
+      
+      // Minimal rate limiting
+      if (i + batchSize < entries.length) {
+        await new Promise(resolve => setTimeout(resolve, 20));
       }
     }
 
+    console.log(`✅ Finished processing ${players.length} players`);
     return players;
   }, [fetchCharacterDetails]);
 
@@ -446,23 +481,23 @@ const ArenaLadder = () => {
     return faction === "Alliance" ? "text-blue-400" : "text-red-400";
   }, []);
 
-  // Pagination functions
+  // Updated pagination functions to work with current bracket data
   const goToPage = useCallback((page) => {
     if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-      const startIndex = (page - 1) * PLAYERS_PER_PAGE;
-      const endIndex = startIndex + PLAYERS_PER_PAGE;
-      const pageData = allPlayersData.slice(startIndex, endIndex);
-      setLadderData(pageData);
+      updatePageData(selectedBracket, selectedRegion, allBracketData, page);
     }
-  }, [allPlayersData, totalPages]);
+  }, [selectedBracket, selectedRegion, allBracketData, totalPages, updatePageData]);
 
   const nextPage = useCallback(() => {
-    goToPage(currentPage + 1);
-  }, [currentPage, goToPage]);
+    if (currentPage < totalPages) {
+      goToPage(currentPage + 1);
+    }
+  }, [currentPage, totalPages, goToPage]);
 
   const prevPage = useCallback(() => {
-    goToPage(currentPage - 1);
+    if (currentPage > 1) {
+      goToPage(currentPage - 1);
+    }
   }, [currentPage, goToPage]);
 
   const formatUpdateTime = useCallback((date) => {
@@ -480,13 +515,20 @@ const ArenaLadder = () => {
   }, []);
 
   const refreshData = useCallback(() => {
-    fetchMoPClassicData(selectedRegion, selectedBracket);
-  }, [fetchMoPClassicData, selectedRegion, selectedBracket]);
+    fetchAllBracketsData(selectedRegion);
+  }, [fetchAllBracketsData, selectedRegion]);
 
-  // Load data when bracket or region changes
+  // Load all bracket data when region changes
   useEffect(() => {
-    fetchMoPClassicData(selectedRegion, selectedBracket);
-  }, [selectedBracket, selectedRegion, fetchMoPClassicData]);
+    fetchAllBracketsData(selectedRegion);
+  }, [selectedRegion, fetchAllBracketsData]);
+
+  // Update page data when bracket changes (instant switching)
+  useEffect(() => {
+    if (allBracketData[`${selectedRegion}-${selectedBracket}`]) {
+      updatePageData(selectedBracket, selectedRegion, allBracketData, 1);
+    }
+  }, [selectedBracket, selectedRegion, allBracketData, updatePageData]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white">
@@ -558,7 +600,7 @@ const ArenaLadder = () => {
         </div>
 
         {/* Rank Cutoffs */}
-        {!loading && allPlayersData.length > 0 && <RankCutoffs />}
+        {!loading && currentBracketData.length > 0 && <RankCutoffs />}
 
         {/* Error Message */}
         {error && (
@@ -616,7 +658,7 @@ const ArenaLadder = () => {
                       className="hover:bg-slate-750 transition-colors duration-150"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getRankIcon(player.rank, allPlayersData.length)}
+                        {getRankIcon(player.rank, currentBracketData.length)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div
@@ -659,7 +701,7 @@ const ArenaLadder = () => {
         )}
 
         {/* Pagination */}
-        {!loading && allPlayersData.length > PLAYERS_PER_PAGE && (
+        {!loading && currentBracketData.length > PLAYERS_PER_PAGE && (
           <div className="flex justify-center items-center space-x-4 mt-8">
             <button
               onClick={prevPage}
@@ -708,7 +750,7 @@ const ArenaLadder = () => {
             </button>
             
             <div className="text-sm text-gray-400">
-              Page {currentPage} of {totalPages} ({allPlayersData.length} total players)
+              Page {currentPage} of {totalPages} ({currentBracketData.length} total players)
             </div>
           </div>
         )}
